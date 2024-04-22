@@ -1,6 +1,7 @@
 from pathlib import Path
 import re
 import pandas as pd
+from sklearn.ensemble import RandomForestClassifier
 
 from tira.rest_api_client import Client
 from tira.third_party_integrations import get_output_directory
@@ -52,6 +53,35 @@ def create_term_frequency_df(row):
     term_frequency_df = term_frequency_df.drop(columns=['index', 'rank'])
     return term_frequency_df
 
+def get_rank(word, frequencies):
+    if word in frequencies:
+        return sorted(frequencies, key=lambda x: frequencies[x], reverse=True).index(word) + 1
+    else:
+        return len(frequencies) + 1
+
+def add_ranking(text_train):
+    # Iterate over each row
+    for word in ["the", "to", "of", "and", "be"]:
+        ranks = []
+        for i, row in text_train.iterrows():
+            frequencies = row['term_frequency']
+            rank = get_rank(word, frequencies)
+            ranks.append(rank)
+        text_train[word + '_rank'] = ranks
+    return text_train
+
+def preprocess_df(df):
+    df['id'] = pd.to_numeric(df['id'])
+    df.set_index('id', inplace=True)
+    df.sort_index(inplace=True)
+    return df
+
+def compute_ranks(df):
+    df['term_frequency'] = df['text'].apply(calculate_term_frequency)
+    df = add_ranking(df)
+    df.drop(columns=['term_frequency', 'text'], inplace=True)
+    return df
+
 if __name__ == "__main__":
 
     tira = Client()
@@ -60,56 +90,40 @@ if __name__ == "__main__":
     text_train = tira.pd.inputs(
         "nlpbuw-fsu-sose-24", "authorship-verification-train-20240408-training"
     )
+    text_train = preprocess_df(text_train)
+
     targets_train = tira.pd.truths(
         "nlpbuw-fsu-sose-24", "authorship-verification-train-20240408-training"
     )
+    targets_train = preprocess_df(targets_train)
+
     # loading validation data (automatically replaced by test data when run on tira)
     text_validation = tira.pd.inputs(
         "nlpbuw-fsu-sose-24", "authorship-verification-validation-20240408-training"
     )
-    text_validation = text_validation.set_index("id")
+    text_validation = preprocess_df(text_validation)
 
     targets_validation = tira.pd.truths(
         "nlpbuw-fsu-sose-24", "authorship-verification-validation-20240408-training"
     )
-    targets_validation = targets_validation.set_index("id")
+    targets_validation = preprocess_df(targets_validation)
 
-    # classifying the data
-    prediction = (
-        text_validation["text"]
-        .str.contains("delve", case=False)
-        .astype(int)
-    )
+    # Compute Ranking of 5 most used words
+    text_train = compute_ranks(text_train)
+    text_validation = compute_ranks(text_validation)
 
-    # converting the prediction to the required format
-    prediction.name = "generated"
-    prediction = prediction.reset_index()
+    # Initializing the Random Forest classifier
+    rf_classifier = RandomForestClassifier(random_state=42)
+    rf_classifier.fit(text_train, targets_train['generated'])
+
+    prediction = pd.DataFrame({'id': text_validation.index})
+    prediction['generated'] = rf_classifier.predict(text_validation)
 
     # saving the prediction
     output_directory = get_output_directory(str(Path(__file__).parent))
     prediction.to_json(
         Path(output_directory) / "predictions.jsonl", orient="records", lines=True
     )
+    prediction = preprocess_df(prediction)
 
-    text_validation['term_frequency'] = text_validation['text'].apply(calculate_term_frequency)
-
-    # Create a list to store term frequency DataFrames for each row
-    term_frequency_dfs = []
-
-    print(targets_validation)
-    print(targets_validation.loc[1])
-
-    # Iterate over each row in the DataFrame
-    for index, row in text_validation.iterrows():
-        # Create term frequency DataFrame for the current row
-        term_frequency_df = create_term_frequency_df(row)
-        # Add the term frequency DataFrame to the list
-        term_frequency_dfs.append(term_frequency_df)
-
-    # Display the list of term frequency DataFrames
-    for i, term_frequency_df in enumerate(term_frequency_dfs):
-        print(f"Term Frequency DataFrame for Row {i}:")
-        print("Generated:", targets_validation.loc[i, 'generated'])
-        print(term_frequency_df)
-
-    print_scores(prediction, targets_validation)
+    #print_scores(prediction, targets_validation)
