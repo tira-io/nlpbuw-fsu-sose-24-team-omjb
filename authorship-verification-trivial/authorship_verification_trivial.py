@@ -1,4 +1,5 @@
 from pathlib import Path
+import numpy as np
 import re
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
@@ -6,7 +7,7 @@ from sklearn.ensemble import RandomForestClassifier
 from tira.rest_api_client import Client
 from tira.third_party_integrations import get_output_directory
 
-def print_scores(expected, actual):
+def print_scores(expected, actual, value=False):
     import pandas as pd
     expected = expected.rename(columns={'generated': 'prediction'})
     merged_df = pd.merge(actual, expected, on='id')
@@ -24,10 +25,13 @@ def print_scores(expected, actual):
     accuracy = (TP + TN) / (TP + TN + FP + FN)
     f1_score = 2 * (precision * recall) / (precision + recall)
 
-    print("Precision: {:.2f}".format(precision))
-    print("Recall: {:.2f}".format(recall))
-    print("Accuracy: {:.2f}".format(accuracy))
-    print("F1 Score: {:.2f}".format(f1_score))
+    if value:
+        return accuracy
+    else:
+        print("Precision: {:.2f}".format(precision))
+        print("Recall: {:.2f}".format(recall))
+        print("Accuracy: {:.2f}".format(accuracy))
+        print("F1 Score: {:.2f}".format(f1_score))
 
 def calculate_term_frequency(text):
     # Entferne Satzzeichen und Sonderzeichen, und wandle in Kleinbuchstaben um
@@ -82,6 +86,31 @@ def compute_ranks(df):
     df.drop(columns=['term_frequency', 'text'], inplace=True)
     return df
 
+def random_forest_calibration(text_train, targets_train, text_validation, targets_validation):
+    max_depth = np.arange(2, 8)
+    n_estimators = np.arange(1, 300)
+    
+    acc = np.zeros((len(max_depth)+2,len(n_estimators)+1))
+    
+    for m in max_depth:
+        for n in n_estimators:
+            rf_classifier = RandomForestClassifier(n_estimators = n, max_depth=m)
+            
+            rf_classifier.fit(text_train, targets_train['generated'])
+            
+            prediction = pd.DataFrame({'id': text_validation.index})
+            prediction['generated'] = rf_classifier.predict(text_validation)
+
+            prediction = preprocess_df(prediction)
+
+            acc[m, n] = print_scores(prediction, targets_validation, value=True)
+    
+            print(f"maxDepth = {m}, nTrees = {n}: Acc = {acc[m,n]}".format(m, n, acc))
+    
+    print(f"Höchste Accurency: {str(np.max(acc))} bei {str(np.unravel_index(np.argmax(acc),np.shape(acc)))}".format(acc))
+    
+    return acc
+
 if __name__ == "__main__":
 
     tira = Client()
@@ -113,7 +142,7 @@ if __name__ == "__main__":
     text_validation = compute_ranks(text_validation)
 
     # Initializing the Random Forest classifier
-    rf_classifier = RandomForestClassifier(random_state=42)
+    rf_classifier = RandomForestClassifier(random_state=42, n_estimators=141, max_depth=7)
     rf_classifier.fit(text_train, targets_train['generated'])
 
     prediction = pd.DataFrame({'id': text_validation.index})
@@ -126,4 +155,4 @@ if __name__ == "__main__":
     )
     prediction = preprocess_df(prediction)
 
-    #print_scores(prediction, targets_validation)
+    print_scores(prediction, targets_validation)
