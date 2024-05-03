@@ -2,6 +2,7 @@ from collections import Counter
 import os
 from pathlib import Path
 import re
+import subprocess
 from nltk.tokenize import word_tokenize
 
 from tqdm import tqdm
@@ -97,6 +98,9 @@ def calculate_word_appearance_percentage(text_df, language_df_map):
     return pd.DataFrame(result_data)
 
 if __name__ == "__main__":
+
+    # Run the bash script
+    subprocess.run(['bash', 'download_commonwords.sh'])
 
     tira = Client()
 
