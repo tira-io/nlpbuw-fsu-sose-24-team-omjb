@@ -99,9 +99,6 @@ def calculate_word_appearance_percentage(text_df, language_df_map):
 
 if __name__ == "__main__":
 
-    # Run the bash script
-    subprocess.run(['bash', 'download_commonwords.sh'])
-
     tira = Client()
 
     # loading validation data (automatically replaced by test data when run on tira)
