@@ -73,12 +73,12 @@ def find_max(df):
     df[['max_value', 'lang']] = df.apply(find_max, axis=1, result_type='expand')
     return df[['id', 'lang']]
 
-def calculate_word_appearance_percentage(text_df, language_df_map, num=5):
+def calculate_word_appearance_percentage(text_df, language_df_map):
     # Initialize empty DataFrame
     result_data = []
 
     # Iterate through texts
-    for index, row in text_df.head(num).iterrows():
+    for index, row in text_df.iterrows():
         # Tokenize text
         #tokenized_text = tokenize(text)
         #text_word_count = len(tokenized_text)
@@ -112,7 +112,7 @@ if __name__ == "__main__":
     )
 
     df_list = get_lang_common_words_df_list(25)
-    result = calculate_word_appearance_percentage(text_validation, df_list, 5)
+    result = calculate_word_appearance_percentage(text_validation, df_list)
     prediction = find_max(result)
 
     # saving the prediction
