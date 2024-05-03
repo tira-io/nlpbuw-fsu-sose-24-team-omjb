@@ -34,19 +34,21 @@ lang_ids = [
 ]
 
 def get_lang_common_words_df_list(rows: int):
-    # Assuming your list of text files is stored in a directory named 'text_files'
+    # Assuming your list of text files is stored in a directory named 'commonwords'
     directory = 'commonwords'
-    file_list = os.listdir(directory)
+    file_list = Path(__file__).parent / directory
+    file_list = list(file_list.glob('*'))
 
     dataframes = {}
 
-    for filename in file_list:
-        if filename.endswith('.txt'):  # Assuming all files are text files
-            file_path = os.path.join(directory, filename)
-            # Read text file into a dataframe
-            df = pd.read_csv(file_path, skiprows=1, names=['word'], nrows=rows)  # Adjust sep parameter if needed
-            # Add dataframe to the dictionary with filename as key
-            dataframes[filename.split('-')[1].split('.')[0]] = df
+    for file_path in file_list:
+        filename = os.path.basename(file_path)
+        lang = filename.split('-')[1].split('.')[0]  # Extract language from filename
+        # Read text file into a dataframe
+        df = pd.read_csv(file_path, skiprows=1, names=['word'], nrows=rows)  # Adjust sep parameter if needed
+        # Add dataframe to the dictionary with language as key
+        dataframes[lang] = df
+
     return dataframes
 
 def calculate_percentage(text, top_words):
@@ -71,12 +73,12 @@ def find_max(df):
     df[['max_value', 'lang']] = df.apply(find_max, axis=1, result_type='expand')
     return df[['id', 'lang']]
 
-def calculate_word_appearance_percentage(text_df, language_df_map):
+def calculate_word_appearance_percentage(text_df, language_df_map, num=5):
     # Initialize empty DataFrame
     result_data = []
 
     # Iterate through texts
-    for index, row in text_df.iterrows():
+    for index, row in text_df.head(num).iterrows():
         # Tokenize text
         #tokenized_text = tokenize(text)
         #text_word_count = len(tokenized_text)
@@ -110,7 +112,7 @@ if __name__ == "__main__":
     )
 
     df_list = get_lang_common_words_df_list(25)
-    result = calculate_word_appearance_percentage(text_validation, df_list)
+    result = calculate_word_appearance_percentage(text_validation, df_list, 5)
     prediction = find_max(result)
 
     # saving the prediction
